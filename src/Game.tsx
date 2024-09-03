@@ -15,11 +15,34 @@ let status = "";
 let countFlags = 0;
 let isTimerOn = false; 
 let timer = 0; 
-let timerId;
+let timerId: NodeJS.Timeout;
+let timePressDown: number;
+let timePressUp: number;
+let moved = false;
 
-class Game extends React.Component {
+interface IProps {}
 
-    constructor(props) {
+interface IState {
+    infoOfCells: ICell[][], 
+    complexity: number,
+    time: number
+}
+
+export interface ICell {
+    opened: boolean,
+    value: number,
+    disabled: boolean, 
+    flaged: boolean
+}
+
+interface IPosition {
+    x: number,
+    y: number
+}
+
+class Game extends React.Component<IProps, IState> {
+
+    constructor(props: IProps) {
         super(props);
         this.state = {
             infoOfCells: [], 
@@ -28,16 +51,16 @@ class Game extends React.Component {
         };
 
         this.handleClick = this.handleClick.bind(this);
+        this.onTouch = this.onTouch.bind(this);
         this.newGame = this.newGame.bind(this);
         this.getCompl = this.getCompl.bind(this);
-
     }
 
     componentDidMount() {
         this.newGame();
     }
   
-    getCompl(difficult) {
+    getCompl(difficult: number) {
         this.setState({
             complexity: difficult
         });
@@ -63,7 +86,9 @@ class Game extends React.Component {
         }
     }
 
-    onRightClick(y, x, cells) {
+    onLeftClick(y:number, x:number, cells:ICell[][]) {
+        
+
         if (!isTimerOn) {
             isTimerOn = true; 
             timerId = setInterval(() => {
@@ -78,15 +103,12 @@ class Game extends React.Component {
             }, 1000);
         }
     
-        if (cells[y][x].value === BOMB) {
-            this.isLose();
-        }
-        
         this.openCells(cells[y][x], x, y);
+                
         this.isWin();
     }
 
-    onLeftClick(y, x, cells) {
+    onRightClick(y:number, x:number, cells:ICell[][]) {
         if (cells[y][x].flaged === false && !cells[y][x].opened) {
             cells[y][x].disabled = true;
             cells[y][x].flaged = true;
@@ -101,23 +123,70 @@ class Game extends React.Component {
         status = "Bombs found " + countFlags + "/" + countBombs;
     }
 
-    handleClick(e, y, x) {
+    onPressDown() {
+        timePressDown = Number(new Date());
+    }
+
+    onPressUp() {
+        timePressUp = Number(new Date());
+    }
+
+    onMove(){
+        moved = true;
+    }
+
+    onTouch(y:number, x:number) {
+        if (moved) {
+            moved = false;
+            return
+        }
+
+        let whichBtn;
+        this.onPressUp();
+        if (timePressUp - timePressDown > 1000) whichBtn = RIGHT_CLICK
+        else whichBtn = LEFT_CLICK
         const cells = this.state.infoOfCells;
+        if (status === "You win!" || status === "You lose!") return;
+
+        switch (whichBtn) {
+            case LEFT_CLICK: 
+                if (timePressUp - timePressDown > 500) 
+                    this.onRightClick(y, x, cells); 
+                else this.onLeftClick(y, x, cells);
+                break;
+            case RIGHT_CLICK: this.onRightClick(y, x, cells); break;
+            default: break;
+        }  
+        
+        this.setState({
+            infoOfCells: cells
+        });  
+    }
+
+    handleClick(e:React.MouseEvent<HTMLButtonElement>, y:number, x:number) {
+        const cells = this.state.infoOfCells;
+        var iOS = navigator.userAgent.match(/iPhone|iPad|iPod/i);
+        if (iOS != null) return
+
         e.preventDefault();
         if (status === "You win!" || status === "You lose!") return;
-        
+
         switch (e.nativeEvent.button) {
-            case LEFT_CLICK: this.onRightClick(y, x, cells); break;
-            case RIGHT_CLICK: this.onLeftClick(y, x, cells); break;
+            case LEFT_CLICK: 
+                if (timePressUp - timePressDown > 1000) 
+                    this.onRightClick(y, x, cells); 
+                else this.onLeftClick(y, x, cells);
+                break;
+            case RIGHT_CLICK: this.onRightClick(y, x, cells); break;
             default: break;
-        }    
-        
+        }  
+         
         this.setState({
             infoOfCells: cells
         });
     }
 
-    randomNumberInRange = (min, max) => {
+    randomNumberInRange = (min:number, max:number) => {
         return Math.floor(Math.random() * (max - min + 1)) + min;
     };
 
@@ -139,15 +208,16 @@ class Game extends React.Component {
         });
     }
 
-    openCells(cell, x, y) {
+    openCells(cell: ICell, x:number, y:number) {
         const cells = this.state.infoOfCells;
+        if (cell.flaged === true) return; 
+        
         if (cell.value === BOMB) {
             cells[y][x].opened = true;
+            this.isLose();
             return;
         }
         
-        if (cell.flaged === true) return; 
-
         if (cell.value !== EMPTY) {
             cells[y][x].opened = true;
             cells[y][x].disabled = true;
@@ -170,8 +240,8 @@ class Game extends React.Component {
         });
     }
 
-    getNeighbors(x, y, mask = [[1, 1, 1,], [1, 0, 1], [1, 1, 1]]) {
-        const neighbors = [];
+    getNeighbors(x:number, y:number, mask = [[1, 1, 1,], [1, 0, 1], [1, 1, 1]]): IPosition[] {
+        const neighbors: IPosition[] = [];
         for (let i = y - 1; i <= y + 1; i++) {
             for (let j = x - 1; j <= x + 1; j++) {
                 if (i >= 0 && i < height && j >= 0 && j < width && mask[i - (y - 1)][j - (x - 1)] === 1) {
@@ -182,7 +252,7 @@ class Game extends React.Component {
         return neighbors;
     }
 
-    setInfoCells(x, y) {
+    setInfoCells() {
         const cells = this.state.infoOfCells;
         for(let y = 0; y < height; y++) {
             for(let x = 0; x < width; x++) {
@@ -241,12 +311,15 @@ class Game extends React.Component {
             isTimerOn = false;
             clearInterval(timerId);
 
-            if (window.localStorage.getItem(this.state.complexity) === null){
-                window.localStorage.setItem(this.state.complexity, this.state.time);
+            const complexity = String(this.state.complexity);
+            const time = String(this.state.time);
+
+            if (window.localStorage.getItem(complexity) === null){
+                window.localStorage.setItem(complexity, time);
             }
 
-            if (this.state.time<window.localStorage.getItem(this.state.complexity)) {
-                window.localStorage.setItem(this.state.complexity, this.state.time);
+            if (this.state.time < Number(window.localStorage.getItem(complexity))) {
+                window.localStorage.setItem(complexity, time);
             }
 
             cells.forEach((row) => {
@@ -301,8 +374,11 @@ class Game extends React.Component {
                       timer={this.state.time} 
                       changeDif={this.getCompl} />
                 <Board state={this.state.infoOfCells} 
-                       dif={this.state.complexity} 
-                       onClick={this.handleClick}/> 
+                       onClick={this.handleClick}
+                       onTouch={this.onTouch}
+                       onMove={this.onMove}
+                       onClickDown={this.onPressDown}
+                       onClickUp={this.onPressUp}/> 
             </div>
         );
     }

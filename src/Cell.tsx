@@ -1,6 +1,17 @@
+import React, { MouseEventHandler } from "react";
 import { BOMB, EMPTY } from "./Game";
+import { ICell } from "./Game";
 
-function Cell(props) {
+interface IProps {
+    state: ICell, 
+    onClick: MouseEventHandler<HTMLButtonElement>,
+    onClickUp: () => void,
+    onClickDown: () => void,
+    onTouch: () => void,
+    onMove: () => void
+}
+
+function Cell(props: IProps) {
     let nameClass = "";
     let value = "";
     if (props.state.opened && props.state.value === BOMB) {
@@ -10,7 +21,7 @@ function Cell(props) {
     else if (props.state.opened) {
         nameClass = "cellOpnd";
         if (props.state.value !== EMPTY) {
-            value = props.state.value;  
+            value = String(props.state.value);  
         } else value = "";
     }
     else {
@@ -23,8 +34,12 @@ function Cell(props) {
 
     return <button className={nameClass}
                    onClick={props.onClick}
+                   onMouseUp={props.onClickUp}
+                   onMouseDown={props.onClickDown}
+                   onTouchEnd={props.onTouch}
+                   onTouchStart={props.onClickDown}
                    onContextMenu={props.onClick}
-                   disabled={props.state.disabled}>
+                   onTouchMove={props.onMove}>
                       {value}
            </button>
 };

@@ -1,12 +1,20 @@
 import { useState } from 'react';
 import './Menu.css';
+import React from 'react';
 
 export let dif = 0; 
 const EASY = 0;
 const MEDIUM = 1;
 const HARD = 2;
 
-function Menu (props) {
+interface IProps {
+    changeDif: (difNumbr:number) => void,
+    newGame: () => void,
+    status: string,
+    timer: number
+}
+
+function Menu (props:IProps) {
     const [stn, stnState] = useState('stnClsd'); 
     let stnClass = stn;
     
@@ -17,7 +25,7 @@ function Menu (props) {
         return 
     }
 
-    function btnDif(strinId, difNumbr, difLabel) {
+    function btnDif(strinId:string, difNumbr:number, difLabel:string) {
         return (
             <div>
                 <input type="radio" 
@@ -68,7 +76,7 @@ function Menu (props) {
                     <p>{props.status}</p>
                 </div>
                 <div className='timer'>   
-                    <p>Time {props.timer} | Best {window.localStorage.getItem(dif)}</p>
+                    <p>Time {props.timer} | Best {window.localStorage.getItem(String(dif))}</p>
                 </div>
             </div>
         </div>

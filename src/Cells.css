@@ -8,6 +8,7 @@ body {
   align-items: center;
   justify-content: center;
   margin-top: 0;
+  -webkit-text-fill-color: #000000;
 }
 
 .row { 
@@ -71,3 +72,25 @@ body {
   background-repeat: no-repeat;
   background-position: center;
 }
+
+.info {
+  display: flex;
+  align-items: center;
+  margin-top: 0px;
+  color: #6b6b6b;
+  justify-content: center;
+}
+
+.info p {
+  margin: 5px;
+}
+
+.flag {
+  color: #1d8603;
+}
+
+@media (min-width: 0px) and (max-width: 1109.98px) {
+  body {
+    width: 1110px;
+  }
+} 
