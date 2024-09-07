@@ -11,6 +11,7 @@ const RIGHT_CLICK = 2;
 let width = 8;
 let height = 8;
 let countBombs = 10;
+let dif = 0;
 let status = "";
 let countFlags = 0;
 let isTimerOn = false; 
@@ -19,13 +20,15 @@ let timerId: NodeJS.Timeout;
 let timePressDown: number;
 let timePressUp: number;
 let moved = false;
+let boardWidth = 1920;
 
 interface IProps {}
 
 interface IState {
     infoOfCells: ICell[][], 
     complexity: number,
-    time: number
+    time: number,
+    widthBoard: number
 }
 
 export interface ICell {
@@ -47,13 +50,33 @@ class Game extends React.Component<IProps, IState> {
         this.state = {
             infoOfCells: [], 
             complexity: 0,
-            time: 0
+            time: 0,
+            widthBoard: 0
         };
 
         this.handleClick = this.handleClick.bind(this);
         this.onTouch = this.onTouch.bind(this);
         this.newGame = this.newGame.bind(this);
         this.getCompl = this.getCompl.bind(this);
+        this.handleResize = this.handleResize.bind(this);
+        window.addEventListener('resize', this.handleResize);
+    }
+
+    handleResize() {
+        
+        let widthW = window.screen.width;
+        let compl = dif;
+
+        if (widthW < 1080 && compl === 2){
+            boardWidth = 1080;
+        } else if (widthW < 820 && compl === 1){
+            boardWidth = 820;
+        } else if (widthW < 370 && compl === 0){
+            boardWidth = 370;
+        } else boardWidth = 0;
+        this.setState({
+            widthBoard: boardWidth
+        });        
     }
 
     componentDidMount() {
@@ -70,16 +93,19 @@ class Game extends React.Component<IProps, IState> {
                 width = 8; 
                 height = 8;
                 countBombs = 10;
+                dif = 0;
                 break;
             case 1:
                 width = 18; 
                 height = 16;
                 countBombs = 40;
+                dif = 1;
                 break;
             case 2: 
                 width = 24; 
                 height = 20;
                 countBombs = 99;
+                dif = 2;
                 break;
             default:
                 break;
@@ -339,6 +365,7 @@ class Game extends React.Component<IProps, IState> {
             infoOfCells: []
         });
         const cells = this.state.infoOfCells;
+        console.log(this.state.complexity);
         for (let f = 0; f < cells.length; f++) cells[f] = [];
         for (let y = 0; y < height; y++) { 
             cells[y] = [];
@@ -364,21 +391,24 @@ class Game extends React.Component<IProps, IState> {
         isTimerOn = false;
         clearInterval(timerId);
         timer = 0; 
+        this.handleResize();
     }
 
     render() {
         return (
-            <div>
+            <div style={{width: boardWidth === 0 ? "100%" : this.state.widthBoard, transition: "1s"}}> 
                 <Menu newGame={this.newGame} 
                       status={status} 
                       timer={this.state.time} 
                       changeDif={this.getCompl} />
-                <Board state={this.state.infoOfCells} 
-                       onClick={this.handleClick}
-                       onTouch={this.onTouch}
-                       onMove={this.onMove}
-                       onClickDown={this.onPressDown}
-                       onClickUp={this.onPressUp}/> 
+                <div style={{width: "100%", transition: "1s"}}>
+                    <Board state={this.state.infoOfCells} 
+                        onClick={this.handleClick}
+                        onTouch={this.onTouch}
+                        onMove={this.onMove}
+                        onClickDown={this.onPressDown}
+                        onClickUp={this.onPressUp}/> 
+                </div>
             </div>
         );
     }

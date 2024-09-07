@@ -1,5 +1,8 @@
-body {
-  background-color: #000000;
+.board {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .cells {
@@ -75,22 +78,16 @@ body {
 
 .info {
   display: flex;
+  flex-direction: row;
   align-items: center;
   margin-top: 0px;
   color: #6b6b6b;
   justify-content: center;
 }
 
-.info p {
-  margin: 5px;
-}
-
 .flag {
   color: #1d8603;
+  margin-left: 5px;
 }
 
-@media (min-width: 0px) and (max-width: 1109.98px) {
-  body {
-    width: 1110px;
-  }
-} 
+ 

@@ -25,9 +25,12 @@ function Board(props:IProps) {
         });
         return <div key={y} className='row'>{rowOfCells}</div>
     });
-    return <div>
+    return <div className="board">
         <div className='cells'>{field}</div>
-        <div className="info"><p>Hold the cell to set or remove the <text className="flag">flag</text></p></div>
+        <div className="info">
+            <p>Hold the cell to set or remove the</p>
+            <p className="flag">flag</p>
+        </div>
     </div>
 }
 
