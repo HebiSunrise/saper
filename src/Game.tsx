@@ -8,50 +8,62 @@ export const EMPTY = 0;
 const LEFT_CLICK = 0;
 const RIGHT_CLICK = 2;
 
-let width = 8;
-let height = 8;
-let countBombs = 10;
-let dif = 0;
-let status = "";
-let countFlags = 0;
-let isTimerOn = false; 
-let timer = 0; 
-let timerId: NodeJS.Timeout;
-let timePressDown: number;
-let timePressUp: number;
-let moved = false;
-let boardWidth = 1920;
+const LONG_PRESS_MS_MOUSE = 1000;
+const LONG_PRESS_MS_TOUCH = 500;
+
+interface IDifficulty {
+    width: number;
+    height: number;
+    bombs: number;
+    minWidth: number;
+}
+
+const DIFFICULTY: IDifficulty[] = [
+    { width: 8,  height: 8,  bombs: 10, minWidth: 370  },
+    { width: 18, height: 16, bombs: 40, minWidth: 820  },
+    { width: 24, height: 20, bombs: 99, minWidth: 1080 },
+];
+
+type Status = 'playing' | 'won' | 'lost';
 
 interface IProps {}
 
 interface IState {
-    infoOfCells: ICell[][], 
-    complexity: number,
-    time: number,
-    widthBoard: number
+    infoOfCells: ICell[][];
+    complexity: number;
+    time: number;
+    widthBoard: number;
+    status: Status;
+    countFlags: number;
 }
 
 export interface ICell {
-    opened: boolean,
-    value: number,
-    disabled: boolean, 
-    flaged: boolean
+    opened: boolean;
+    value: number;
+    disabled: boolean;
+    flaged: boolean;
 }
 
 interface IPosition {
-    x: number,
-    y: number
+    x: number;
+    y: number;
 }
 
 class Game extends React.Component<IProps, IState> {
+    private timerId: ReturnType<typeof setInterval> | null = null;
+    private timePressDown = 0;
+    private timePressUp = 0;
+    private moved = false;
 
     constructor(props: IProps) {
         super(props);
         this.state = {
-            infoOfCells: [], 
+            infoOfCells: [],
             complexity: 0,
             time: 0,
-            widthBoard: 0
+            widthBoard: 0,
+            status: 'playing',
+            countFlags: 0,
         };
 
         this.handleClick = this.handleClick.bind(this);
@@ -59,359 +71,280 @@ class Game extends React.Component<IProps, IState> {
         this.newGame = this.newGame.bind(this);
         this.getCompl = this.getCompl.bind(this);
         this.handleResize = this.handleResize.bind(this);
-        window.addEventListener('resize', this.handleResize);
-    }
-
-    handleResize() {
-        
-        let widthW = window.screen.width;
-        let compl = dif;
-
-        if (widthW < 1080 && compl === 2){
-            boardWidth = 1080;
-        } else if (widthW < 820 && compl === 1){
-            boardWidth = 820;
-        } else if (widthW < 370 && compl === 0){
-            boardWidth = 370;
-        } else boardWidth = 0;
-        this.setState({
-            widthBoard: boardWidth
-        });        
+        this.onPressDown = this.onPressDown.bind(this);
+        this.onPressUp = this.onPressUp.bind(this);
+        this.onMove = this.onMove.bind(this);
     }
 
     componentDidMount() {
+        window.addEventListener('resize', this.handleResize);
         this.newGame();
     }
-  
+
+    componentWillUnmount() {
+        window.removeEventListener('resize', this.handleResize);
+        this.stopTimer();
+    }
+
+    handleResize() {
+        const cfg = DIFFICULTY[this.state.complexity];
+        const boardWidth = window.innerWidth < cfg.minWidth ? cfg.minWidth : 0;
+        this.setState({ widthBoard: boardWidth });
+    }
+
     getCompl(difficult: number) {
-        this.setState({
-            complexity: difficult
-        });
+        if (difficult < 0 || difficult >= DIFFICULTY.length) return;
+        this.setState({ complexity: difficult });
+    }
 
-        switch (difficult) {
-            case 0:
-                width = 8; 
-                height = 8;
-                countBombs = 10;
-                dif = 0;
-                break;
-            case 1:
-                width = 18; 
-                height = 16;
-                countBombs = 40;
-                dif = 1;
-                break;
-            case 2: 
-                width = 24; 
-                height = 20;
-                countBombs = 99;
-                dif = 2;
-                break;
-            default:
-                break;
+    private cloneCells(cells: ICell[][]): ICell[][] {
+        return cells.map(row => row.map(c => ({ ...c })));
+    }
+
+    private startTimer() {
+        if (this.timerId !== null) return;
+        this.timerId = setInterval(() => {
+            this.setState(s => ({ time: s.time + 1 }));
+        }, 1000);
+    }
+
+    private stopTimer() {
+        if (this.timerId !== null) {
+            clearInterval(this.timerId);
+            this.timerId = null;
         }
     }
 
-    onLeftClick(y:number, x:number, cells:ICell[][]) {
-        
+    private statusLabel(status: Status, flags: number, bombs: number): string {
+        if (status === 'won') return 'You win!';
+        if (status === 'lost') return 'You lose!';
+        return `Bombs found ${flags}/${bombs}`;
+    }
 
-        if (!isTimerOn) {
-            isTimerOn = true; 
-            timerId = setInterval(() => {
-                if (isTimerOn){
-                    timer++;
-                    this.setState({
-                        time: timer
-                    });
+    private applyAction(y: number, x: number, longPress: boolean, isRightClick: boolean) {
+        if (this.state.status !== 'playing') return;
+
+        const cells = this.cloneCells(this.state.infoOfCells);
+        let nextStatus: Status = 'playing';
+        let nextFlags = this.state.countFlags;
+
+        if (isRightClick || longPress) {
+            const cell = cells[y][x];
+            if (!cell.opened) {
+                if (!cell.flaged) {
+                    cell.flaged = true;
+                    cell.disabled = true;
+                    nextFlags++;
                 } else {
-                    clearInterval(timerId);
-                }
-            }, 1000);
-        }
-    
-        this.openCells(cells[y][x], x, y);
-                
-        this.isWin();
-    }
-
-    onRightClick(y:number, x:number, cells:ICell[][]) {
-        if (cells[y][x].flaged === false && !cells[y][x].opened) {
-            cells[y][x].disabled = true;
-            cells[y][x].flaged = true;
-            countFlags++;
-        } 
-        else if (cells[y][x].flaged === true && !cells[y][x].opened) {
-            cells[y][x].disabled = false;
-            cells[y][x].flaged = false;
-            countFlags--;
-        }
-    
-        status = "Bombs found " + countFlags + "/" + countBombs;
-    }
-
-    onPressDown() {
-        timePressDown = Number(new Date());
-    }
-
-    onPressUp() {
-        timePressUp = Number(new Date());
-    }
-
-    onMove(){
-        moved = true;
-    }
-
-    onTouch(y:number, x:number) {
-        if (moved) {
-            moved = false;
-            return
-        }
-
-        let whichBtn;
-        this.onPressUp();
-        if (timePressUp - timePressDown > 1000) whichBtn = RIGHT_CLICK
-        else whichBtn = LEFT_CLICK
-        const cells = this.state.infoOfCells;
-        if (status === "You win!" || status === "You lose!") return;
-
-        switch (whichBtn) {
-            case LEFT_CLICK: 
-                if (timePressUp - timePressDown > 500) 
-                    this.onRightClick(y, x, cells); 
-                else this.onLeftClick(y, x, cells);
-                break;
-            case RIGHT_CLICK: this.onRightClick(y, x, cells); break;
-            default: break;
-        }  
-        
-        this.setState({
-            infoOfCells: cells
-        });  
-    }
-
-    handleClick(e:React.MouseEvent<HTMLButtonElement>, y:number, x:number) {
-        const cells = this.state.infoOfCells;
-        var iOS = navigator.userAgent.match(/iPhone|iPad|iPod/i);
-        if (iOS != null) return
-
-        e.preventDefault();
-        if (status === "You win!" || status === "You lose!") return;
-
-        switch (e.nativeEvent.button) {
-            case LEFT_CLICK: 
-                if (timePressUp - timePressDown > 1000) 
-                    this.onRightClick(y, x, cells); 
-                else this.onLeftClick(y, x, cells);
-                break;
-            case RIGHT_CLICK: this.onRightClick(y, x, cells); break;
-            default: break;
-        }  
-         
-        this.setState({
-            infoOfCells: cells
-        });
-    }
-
-    randomNumberInRange = (min:number, max:number) => {
-        return Math.floor(Math.random() * (max - min + 1)) + min;
-    };
-
-    setBombs () {
-        let count = countBombs;
-        const bombs = this.state.infoOfCells;
-        while (count > 0) {
-            const mbBombX = this.randomNumberInRange(0, width-1);
-            const mbBombY = this.randomNumberInRange(0, height-1);
-
-            if (bombs[mbBombY][mbBombX].value === EMPTY) {
-                bombs[mbBombY][mbBombX].value = BOMB;
-                count--;
-            }
-        }
-
-        this.setState({
-            infoOfCells: bombs
-        });
-    }
-
-    openCells(cell: ICell, x:number, y:number) {
-        const cells = this.state.infoOfCells;
-        if (cell.flaged === true) return; 
-        
-        if (cell.value === BOMB) {
-            cells[y][x].opened = true;
-            this.isLose();
-            return;
-        }
-        
-        if (cell.value !== EMPTY) {
-            cells[y][x].opened = true;
-            cells[y][x].disabled = true;
-            return;
-        }
-
-       
-        if (cell.opened === true) return; 
-        
-        cells[y][x].opened = true;
-        cells[y][x].disabled = true;
-
-        const neighbors = this.getNeighbors(x, y);
-        neighbors.map((neighbor, i) => {
-            return this.openCells(cells[neighbor.y][neighbor.x], neighbor.x, neighbor.y);
-        });
-        
-        this.setState({
-            infoOfCells: cells
-        });
-    }
-
-    getNeighbors(x:number, y:number, mask = [[1, 1, 1,], [1, 0, 1], [1, 1, 1]]): IPosition[] {
-        const neighbors: IPosition[] = [];
-        for (let i = y - 1; i <= y + 1; i++) {
-            for (let j = x - 1; j <= x + 1; j++) {
-                if (i >= 0 && i < height && j >= 0 && j < width && mask[i - (y - 1)][j - (x - 1)] === 1) {
-                    neighbors.push({x: j, y: i});
+                    cell.flaged = false;
+                    cell.disabled = false;
+                    nextFlags--;
                 }
             }
-        }
-        return neighbors;
-    }
-
-    setInfoCells() {
-        const cells = this.state.infoOfCells;
-        for(let y = 0; y < height; y++) {
-            for(let x = 0; x < width; x++) {
-                if (cells[y][x].value === BOMB) continue;
-                
-                const neighbors = this.getNeighbors(x, y);
-                let count = 0;
-                for(const neighbor of neighbors) {
-                    if(cells[neighbor.y][neighbor.x].value === BOMB)
-                        count++;
-                }
-
-                cells[y][x].value = count;
-                
-                this.setState({
-                    infoOfCells: cells
-                });
-            }
-        }        
-    }
-
-    isLose() {
-        const cells = this.state.infoOfCells;
-        cells.forEach((row) => {
-            row.forEach((cell) => {
-                cell.disabled = true;
-                if (cell.value === BOMB) {
-                    cell.opened = true;
-                }
-            });
-        });
-
-        this.setState({
-            infoOfCells: cells
-        });
-
-        status = "You lose!";
-        isTimerOn = false;
-        clearInterval(timerId)
-    }
-
-    isWin() {
-        const cells = this.state.infoOfCells;
-        let countEmpty = 0;
-        
-        cells.forEach((row) => {
-            row.forEach((cell) => {
-                if (cell.value !== BOMB && cell.opened === false){
-                    countEmpty++;
-                }
-            });
-        });
-
-        if (countEmpty === 0){
-            status = "You win!";
-            isTimerOn = false;
-            clearInterval(timerId);
-
-            const complexity = String(this.state.complexity);
-            const time = String(this.state.time);
-
-            if (window.localStorage.getItem(complexity) === null){
-                window.localStorage.setItem(complexity, time);
-            }
-
-            if (this.state.time < Number(window.localStorage.getItem(complexity))) {
-                window.localStorage.setItem(complexity, time);
-            }
-
-            cells.forEach((row) => {
-                row.forEach((cell) => {
-                    if (cell.opened === false){
-                        cell.flaged = true;
-                        cell.disabled = true;
-                    }
-                });
-            });
-        }
-    }
-
-    newGame(){
-        
-        this.setState({
-            infoOfCells: []
-        });
-        const cells = this.state.infoOfCells;
-        console.log(this.state.complexity);
-        for (let f = 0; f < cells.length; f++) cells[f] = [];
-        for (let y = 0; y < height; y++) { 
-            cells[y] = [];
-            for (let x = 0; x < width; x++) {
-                cells[y][x] = {
-                    opened: false,
-                    value: EMPTY,
-                    disabled: false, 
-                    flaged: false
-                };
+        } else {
+            this.startTimer();
+            const lost = this.openCells(cells, x, y);
+            if (lost) {
+                this.revealAllOnLose(cells);
+                nextStatus = 'lost';
+                this.stopTimer();
+            } else if (this.checkWin(cells)) {
+                this.finalizeWin(cells);
+                nextStatus = 'won';
+                this.stopTimer();
             }
         }
-
-        this.setBombs();
-        this.setInfoCells();
 
         this.setState({
             infoOfCells: cells,
-            time: 0
+            status: nextStatus,
+            countFlags: nextFlags,
         });
-        countFlags = 0;
-        status = "Bombs found " + countFlags + "/" + countBombs;
-        isTimerOn = false;
-        clearInterval(timerId);
-        timer = 0; 
-        this.handleResize();
+    }
+
+    onPressDown() {
+        this.timePressDown = Date.now();
+    }
+
+    onPressUp() {
+        this.timePressUp = Date.now();
+    }
+
+    onMove() {
+        this.moved = true;
+    }
+
+    onTouch(y: number, x: number) {
+        if (this.moved) {
+            this.moved = false;
+            return;
+        }
+        this.timePressUp = Date.now();
+        const held = this.timePressUp - this.timePressDown;
+        this.applyAction(y, x, held > LONG_PRESS_MS_TOUCH, false);
+    }
+
+    handleClick(e: React.MouseEvent<HTMLButtonElement>, y: number, x: number) {
+        const iOS = navigator.userAgent.match(/iPhone|iPad|iPod/i);
+        if (iOS != null) return;
+
+        e.preventDefault();
+        const btn = e.nativeEvent.button;
+        if (btn !== LEFT_CLICK && btn !== RIGHT_CLICK) return;
+
+        const held = this.timePressUp - this.timePressDown;
+        const longPress = btn === LEFT_CLICK && held > LONG_PRESS_MS_MOUSE;
+        this.applyAction(y, x, longPress, btn === RIGHT_CLICK);
+    }
+
+    private randomInRange(min: number, max: number) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    private placeBombs(cells: ICell[][], width: number, height: number, bombs: number) {
+        let count = bombs;
+        while (count > 0) {
+            const bx = this.randomInRange(0, width - 1);
+            const by = this.randomInRange(0, height - 1);
+            if (cells[by][bx].value === EMPTY) {
+                cells[by][bx].value = BOMB;
+                count--;
+            }
+        }
+    }
+
+    private openCells(cells: ICell[][], x: number, y: number): boolean {
+        const height = cells.length;
+        const width = cells[0].length;
+        const start = cells[y][x];
+        if (start.flaged) return false;
+
+        if (start.value === BOMB) {
+            start.opened = true;
+            return true;
+        }
+
+        const stack: IPosition[] = [{ x, y }];
+        while (stack.length > 0) {
+            const p = stack.pop()!;
+            const c = cells[p.y][p.x];
+            if (c.opened || c.flaged) continue;
+
+            c.opened = true;
+            c.disabled = true;
+
+            if (c.value === EMPTY) {
+                for (let i = p.y - 1; i <= p.y + 1; i++) {
+                    for (let j = p.x - 1; j <= p.x + 1; j++) {
+                        if (i === p.y && j === p.x) continue;
+                        if (i < 0 || i >= height || j < 0 || j >= width) continue;
+                        const n = cells[i][j];
+                        if (!n.opened && !n.flaged && n.value !== BOMB) {
+                            stack.push({ x: j, y: i });
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private computeNumbers(cells: ICell[][]) {
+        const height = cells.length;
+        const width = cells[0].length;
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                if (cells[y][x].value === BOMB) continue;
+                let count = 0;
+                for (let i = y - 1; i <= y + 1; i++) {
+                    for (let j = x - 1; j <= x + 1; j++) {
+                        if (i === y && j === x) continue;
+                        if (i < 0 || i >= height || j < 0 || j >= width) continue;
+                        if (cells[i][j].value === BOMB) count++;
+                    }
+                }
+                cells[y][x].value = count;
+            }
+        }
+    }
+
+    private revealAllOnLose(cells: ICell[][]) {
+        cells.forEach(row => row.forEach(cell => {
+            cell.disabled = true;
+            if (cell.value === BOMB) cell.opened = true;
+        }));
+    }
+
+    private checkWin(cells: ICell[][]): boolean {
+        for (const row of cells) {
+            for (const cell of row) {
+                if (cell.value !== BOMB && !cell.opened) return false;
+            }
+        }
+        return true;
+    }
+
+    private finalizeWin(cells: ICell[][]) {
+        const key = String(this.state.complexity);
+        const time = this.state.time;
+        const prev = window.localStorage.getItem(key);
+        if (prev === null || time < Number(prev)) {
+            window.localStorage.setItem(key, String(time));
+        }
+        cells.forEach(row => row.forEach(cell => {
+            if (!cell.opened) {
+                cell.flaged = true;
+                cell.disabled = true;
+            }
+        }));
+    }
+
+    newGame() {
+        const cfg = DIFFICULTY[this.state.complexity];
+        const { width, height, bombs } = cfg;
+
+        const cells: ICell[][] = [];
+        for (let y = 0; y < height; y++) {
+            cells[y] = [];
+            for (let x = 0; x < width; x++) {
+                cells[y][x] = { opened: false, value: EMPTY, disabled: false, flaged: false };
+            }
+        }
+        this.placeBombs(cells, width, height, bombs);
+        this.computeNumbers(cells);
+
+        this.stopTimer();
+
+        this.setState({
+            infoOfCells: cells,
+            time: 0,
+            countFlags: 0,
+            status: 'playing',
+        }, () => this.handleResize());
     }
 
     render() {
+        const { widthBoard, infoOfCells, time, status, countFlags, complexity } = this.state;
+        const bombs = DIFFICULTY[complexity].bombs;
+        const statusLabel = this.statusLabel(status, countFlags, bombs);
+
         return (
-            <div style={{width: boardWidth === 0 ? "100%" : this.state.widthBoard, transition: "1s"}}> 
-                <Menu newGame={this.newGame} 
-                      status={status} 
-                      timer={this.state.time} 
+            <div style={{ width: widthBoard === 0 ? '100%' : widthBoard, transition: '1s' }}>
+                <Menu newGame={this.newGame}
+                      status={statusLabel}
+                      timer={time}
                       changeDif={this.getCompl} />
-                <div style={{width: "100%", transition: "1s"}}>
-                    <Board state={this.state.infoOfCells} 
+                <div style={{ width: '100%', transition: '1s' }}>
+                    <Board state={infoOfCells}
                         onClick={this.handleClick}
                         onTouch={this.onTouch}
                         onMove={this.onMove}
                         onClickDown={this.onPressDown}
-                        onClickUp={this.onPressUp}/> 
+                        onClickUp={this.onPressUp} />
                 </div>
             </div>
         );
     }
 }
 
-export default Game
+export default Game;
