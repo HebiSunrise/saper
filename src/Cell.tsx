@@ -3,7 +3,7 @@ import { BOMB, EMPTY } from "./Game";
 import { ICell } from "./Game";
 
 interface IProps {
-    state: ICell, 
+    state: ICell,
     onClick: MouseEventHandler<HTMLButtonElement>,
     onClickUp: () => void,
     onClickDown: () => void,
@@ -17,31 +17,36 @@ function Cell(props: IProps) {
     if (props.state.opened && props.state.value === BOMB) {
         nameClass = "cellOpndBomb";
         value = "";
-    } 
+    }
     else if (props.state.opened) {
         nameClass = "cellOpnd";
         if (props.state.value !== EMPTY) {
-            value = String(props.state.value);  
+            value = String(props.state.value);
         } else value = "";
     }
     else {
         nameClass = "cellClsd";
     }
 
-    if (!props.state.opened && props.state.flaged){
+    if (!props.state.opened && props.state.flaged) {
         nameClass = "cellFlag";
     }
 
+    const handleMouseDown = (e: React.MouseEvent<HTMLButtonElement>) => {
+        if (e.button === 0) props.onClickDown();
+    };
+
     return <button className={nameClass}
-                   onClick={props.onClick}
-                   onMouseUp={props.onClickUp}
-                   onMouseDown={props.onClickDown}
-                   onTouchEnd={props.onTouch}
-                   onTouchStart={props.onClickDown}
-                   onContextMenu={props.onClick}
-                   onTouchMove={props.onMove}>
-                      {value}
-           </button>
+        onClick={props.onClick}
+        onMouseDown={handleMouseDown}
+        onMouseUp={props.onClickUp}
+        onMouseLeave={props.onClickUp}
+        onTouchStart={props.onClickDown}
+        onTouchEnd={props.onTouch}
+        onTouchMove={props.onMove}
+        onContextMenu={props.onClick}>
+        {value}
+    </button>
 };
 
 export default Cell;

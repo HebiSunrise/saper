@@ -8,8 +8,7 @@ export const EMPTY = 0;
 const LEFT_CLICK = 0;
 const RIGHT_CLICK = 2;
 
-const LONG_PRESS_MS_MOUSE = 1000;
-const LONG_PRESS_MS_TOUCH = 500;
+const LONG_PRESS_MS = 500;
 
 interface IDifficulty {
     width: number;
@@ -51,9 +50,8 @@ interface IPosition {
 
 class Game extends React.Component<IProps, IState> {
     private timerId: ReturnType<typeof setInterval> | null = null;
-    private timePressDown = 0;
-    private timePressUp = 0;
-    private moved = false;
+    private longPressTimerId: ReturnType<typeof setTimeout> | null = null;
+    private longPressFired = false;
     private bombsPlaced = false;
 
     constructor(props: IProps) {
@@ -85,6 +83,7 @@ class Game extends React.Component<IProps, IState> {
     componentWillUnmount() {
         window.removeEventListener('resize', this.handleResize);
         this.stopTimer();
+        this.cancelLongPressTimer();
     }
 
     handleResize() {
@@ -144,8 +143,10 @@ class Game extends React.Component<IProps, IState> {
             }
         } else {
             if (!this.bombsPlaced) {
-                const cfg = DIFFICULTY[this.state.complexity];
-                this.placeBombs(cells, cfg.width, cfg.height, cfg.bombs, x, y);
+                const height = cells.length;
+                const width = cells[0].length;
+                const bombs = DIFFICULTY[this.state.complexity].bombs;
+                this.placeBombs(cells, width, height, bombs, x, y);
                 this.computeNumbers(cells);
                 this.bombsPlaced = true;
             }
@@ -169,26 +170,39 @@ class Game extends React.Component<IProps, IState> {
         });
     }
 
-    onPressDown() {
-        this.timePressDown = Date.now();
+    private cancelLongPressTimer() {
+        if (this.longPressTimerId !== null) {
+            clearTimeout(this.longPressTimerId);
+            this.longPressTimerId = null;
+        }
+    }
+
+    onPressDown(y: number, x: number) {
+        this.longPressFired = false;
+        this.cancelLongPressTimer();
+        this.longPressTimerId = setTimeout(() => {
+            this.longPressTimerId = null;
+            this.longPressFired = true;
+            this.applyAction(y, x, true, false);
+        }, LONG_PRESS_MS);
     }
 
     onPressUp() {
-        this.timePressUp = Date.now();
+        this.cancelLongPressTimer();
     }
 
     onMove() {
-        this.moved = true;
+        this.cancelLongPressTimer();
+        this.longPressFired = true;
     }
 
     onTouch(y: number, x: number) {
-        if (this.moved) {
-            this.moved = false;
+        if (this.longPressFired) {
+            this.longPressFired = false;
             return;
         }
-        this.timePressUp = Date.now();
-        const held = this.timePressUp - this.timePressDown;
-        this.applyAction(y, x, held > LONG_PRESS_MS_TOUCH, false);
+        this.cancelLongPressTimer();
+        this.applyAction(y, x, false, false);
     }
 
     handleClick(e: React.MouseEvent<HTMLButtonElement>, y: number, x: number) {
@@ -196,12 +210,17 @@ class Game extends React.Component<IProps, IState> {
         if (iOS != null) return;
 
         e.preventDefault();
+
+        if (this.longPressFired) {
+            this.longPressFired = false;
+            this.cancelLongPressTimer();
+            return;
+        }
+        this.cancelLongPressTimer();
+
         const btn = e.nativeEvent.button;
         if (btn !== LEFT_CLICK && btn !== RIGHT_CLICK) return;
-
-        const held = this.timePressUp - this.timePressDown;
-        const longPress = btn === LEFT_CLICK && held > LONG_PRESS_MS_MOUSE;
-        this.applyAction(y, x, longPress, btn === RIGHT_CLICK);
+        this.applyAction(y, x, false, btn === RIGHT_CLICK);
     }
 
     private randomInRange(min: number, max: number) {
@@ -218,7 +237,6 @@ class Game extends React.Component<IProps, IState> {
     ) {
         const totalCells = width * height;
         const safe = new Set<number>();
-
         const useNeighborhood = bombs <= totalCells - 9;
         for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
@@ -329,24 +347,24 @@ class Game extends React.Component<IProps, IState> {
     }
 
     newGame() {
-        const { width, height } = DIFFICULTY[this.state.complexity];
-
-        const cells: ICell[][] = [];
-        for (let y = 0; y < height; y++) {
-            cells[y] = [];
-            for (let x = 0; x < width; x++) {
-                cells[y][x] = { opened: false, value: EMPTY, disabled: false, flaged: false };
-            }
-        }
-
         this.bombsPlaced = false;
         this.stopTimer();
 
-        this.setState({
-            infoOfCells: cells,
-            time: 0,
-            countFlags: 0,
-            status: 'playing',
+        this.setState(prev => {
+            const { width, height } = DIFFICULTY[prev.complexity];
+            const cells: ICell[][] = [];
+            for (let y = 0; y < height; y++) {
+                cells[y] = [];
+                for (let x = 0; x < width; x++) {
+                    cells[y][x] = { opened: false, value: EMPTY, disabled: false, flaged: false };
+                }
+            }
+            return {
+                infoOfCells: cells,
+                time: 0,
+                countFlags: 0,
+                status: 'playing' as Status,
+            };
         }, () => this.handleResize());
     }
 
