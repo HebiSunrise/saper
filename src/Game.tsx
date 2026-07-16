@@ -19,14 +19,14 @@ interface IDifficulty {
 }
 
 const DIFFICULTY: IDifficulty[] = [
-    { width: 8,  height: 8,  bombs: 10, minWidth: 370  },
-    { width: 18, height: 16, bombs: 40, minWidth: 820  },
+    { width: 8, height: 8, bombs: 10, minWidth: 370 },
+    { width: 18, height: 16, bombs: 40, minWidth: 820 },
     { width: 24, height: 20, bombs: 99, minWidth: 1080 },
 ];
 
 type Status = 'playing' | 'won' | 'lost';
 
-interface IProps {}
+interface IProps { }
 
 interface IState {
     infoOfCells: ICell[][];
@@ -54,6 +54,7 @@ class Game extends React.Component<IProps, IState> {
     private timePressDown = 0;
     private timePressUp = 0;
     private moved = false;
+    private bombsPlaced = false;
 
     constructor(props: IProps) {
         super(props);
@@ -142,6 +143,12 @@ class Game extends React.Component<IProps, IState> {
                 }
             }
         } else {
+            if (!this.bombsPlaced) {
+                const cfg = DIFFICULTY[this.state.complexity];
+                this.placeBombs(cells, cfg.width, cfg.height, cfg.bombs, x, y);
+                this.computeNumbers(cells);
+                this.bombsPlaced = true;
+            }
             this.startTimer();
             const lost = this.openCells(cells, x, y);
             if (lost) {
@@ -201,12 +208,34 @@ class Game extends React.Component<IProps, IState> {
         return Math.floor(Math.random() * (max - min + 1)) + min;
     }
 
-    private placeBombs(cells: ICell[][], width: number, height: number, bombs: number) {
+    private placeBombs(
+        cells: ICell[][],
+        width: number,
+        height: number,
+        bombs: number,
+        safeX: number,
+        safeY: number,
+    ) {
+        const totalCells = width * height;
+        const safe = new Set<number>();
+
+        const useNeighborhood = bombs <= totalCells - 9;
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+                if (!useNeighborhood && (dx !== 0 || dy !== 0)) continue;
+                const nx = safeX + dx;
+                const ny = safeY + dy;
+                if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                    safe.add(ny * width + nx);
+                }
+            }
+        }
+
         let count = bombs;
         while (count > 0) {
             const bx = this.randomInRange(0, width - 1);
             const by = this.randomInRange(0, height - 1);
-            if (cells[by][bx].value === EMPTY) {
+            if (cells[by][bx].value === EMPTY && !safe.has(by * width + bx)) {
                 cells[by][bx].value = BOMB;
                 count--;
             }
@@ -300,8 +329,7 @@ class Game extends React.Component<IProps, IState> {
     }
 
     newGame() {
-        const cfg = DIFFICULTY[this.state.complexity];
-        const { width, height, bombs } = cfg;
+        const { width, height } = DIFFICULTY[this.state.complexity];
 
         const cells: ICell[][] = [];
         for (let y = 0; y < height; y++) {
@@ -310,9 +338,8 @@ class Game extends React.Component<IProps, IState> {
                 cells[y][x] = { opened: false, value: EMPTY, disabled: false, flaged: false };
             }
         }
-        this.placeBombs(cells, width, height, bombs);
-        this.computeNumbers(cells);
 
+        this.bombsPlaced = false;
         this.stopTimer();
 
         this.setState({
@@ -331,9 +358,9 @@ class Game extends React.Component<IProps, IState> {
         return (
             <div style={{ width: widthBoard === 0 ? '100%' : widthBoard, transition: '1s' }}>
                 <Menu newGame={this.newGame}
-                      status={statusLabel}
-                      timer={time}
-                      changeDif={this.getCompl} />
+                    status={statusLabel}
+                    timer={time}
+                    changeDif={this.getCompl} />
                 <div style={{ width: '100%', transition: '1s' }}>
                     <Board state={infoOfCells}
                         onClick={this.handleClick}
